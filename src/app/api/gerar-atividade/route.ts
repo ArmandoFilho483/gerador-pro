@@ -38,12 +38,17 @@ const AtividadeSchema = z.object({
 
 const MODELOS = [
   "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-flash-latest",
   "gemini-flash-lite-latest",
   "gemini-3.1-flash-lite",
+  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-pro-latest"
 ];
 
 export async function POST(req: NextRequest) {
@@ -201,6 +206,7 @@ Responda em JSON rigoroso seguindo o schema requerido.`;
 
     let respostaJson = null;
     let ultimoErro = null;
+    let modelosComCotaEsgotada = 0;
 
     for (const modelo of MODELOS) {
       try {
@@ -221,6 +227,7 @@ Responda em JSON rigoroso seguindo o schema requerido.`;
         if (!resp.ok) {
           const txt = await resp.text();
           console.warn(`[GEMINI FALLBACK] Modelo ${modelo} retornou HTTP ${resp.status}: ${txt}`);
+          if (resp.status === 429) modelosComCotaEsgotada++;
           ultimoErro = `HTTP ${resp.status}`;
           continue; // Tenta o próximo modelo
         }
@@ -256,8 +263,14 @@ Responda em JSON rigoroso seguindo o schema requerido.`;
     }
 
     if (!respostaJson) {
+      if (modelosComCotaEsgotada >= MODELOS.length) {
+        return NextResponse.json(
+          { erro: `Aviso de Cota: Todos os ${MODELOS.length} modelos gratuitos do Gemini atingiram o limite diário da sua chave hoje. A cota será renovada automaticamente pelo Google em algumas horas, ou você pode cadastrar uma nova chave gratuita.` },
+          { status: 429 }
+        );
+      }
       return NextResponse.json(
-        { erro: `Não foi possível gerar a atividade após tentar todos os modelos disponíveis. Detalhe: ${ultimoErro}` },
+        { erro: `Não foi possível gerar a atividade após tentar todos os ${MODELOS.length} modelos disponíveis. Detalhe: ${ultimoErro}` },
         { status: 502 }
       );
     }
